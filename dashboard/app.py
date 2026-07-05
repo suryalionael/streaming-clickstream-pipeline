@@ -103,7 +103,7 @@ def _render_dashboard_page(page: str, store: MetricsStore) -> None:
             render_products(products_df, categories_df)
 
         elif page == "Infrastructure":
-            render_infrastructure()
+            render_infrastructure(store)
     except Exception:
         logger.exception("Error rendering dashboard page")
         st.error("An unexpected error occurred. The pipeline may still be initializing.")

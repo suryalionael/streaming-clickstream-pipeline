@@ -276,6 +276,74 @@ class MetricsStore:
         except Exception:
             return pd.DataFrame()
 
+    # --- Pipeline Health Queries ---
+
+    def get_pipeline_health(self) -> dict[str, Any]:
+        """Return live operational health metrics for the pipeline dashboard."""
+        health: dict[str, Any] = {
+            "bronze_count": 0,
+            "silver_count": 0,
+            "gold_funnel_count": 0,
+            "gold_product_count": 0,
+            "gold_traffic_count": 0,
+            "dead_letter_count": 0,
+            "events_per_second": 0.0,
+            "latest_bronze_ts": None,
+            "latest_silver_ts": None,
+            "latest_gold_ts": None,
+            "duckdb_connected": False,
+        }
+        try:
+            health["duckdb_connected"] = self._connected
+
+            health["bronze_count"] = self._table_row_count("bronze")
+            health["silver_count"] = self._table_row_count("silver")
+            health["gold_funnel_count"] = self._table_row_count("funnel_metrics")
+            health["gold_product_count"] = self._table_row_count("product_performance")
+            health["gold_traffic_count"] = self._table_row_count("traffic_analytics")
+
+            health["latest_bronze_ts"] = self._latest_timestamp("bronze", "event_time")
+            health["latest_silver_ts"] = self._latest_timestamp("silver", "event_time")
+
+            eps_df = self.query(
+                """
+                SELECT COALESCE(MAX(events_per_second), 0) AS eps
+                FROM funnel_metrics
+                """
+            )
+            if not eps_df.empty:
+                health["events_per_second"] = round(float(eps_df.iloc[0]["eps"]), 2)
+
+            ts_df = self.query(
+                """
+                SELECT COALESCE(MAX(window_end), '') AS latest
+                FROM funnel_metrics
+                """
+            )
+            if not ts_df.empty:
+                health["latest_gold_ts"] = str(ts_df.iloc[0]["latest"])
+        except Exception as e:
+            logger.warning(f"Failed to collect pipeline health: {e}")
+        return health
+
+    def _table_row_count(self, view_name: str) -> int:
+        try:
+            df = self.query(f"SELECT COUNT(*) AS cnt FROM {view_name}")
+            if not df.empty:
+                return int(df.iloc[0]["cnt"])
+        except Exception:
+            pass
+        return 0
+
+    def _latest_timestamp(self, view_name: str, col: str) -> str | None:
+        try:
+            df = self.query(f"SELECT MAX({col}) AS ts FROM {view_name}")
+            if not df.empty and df.iloc[0]["ts"] is not None:
+                return str(df.iloc[0]["ts"])
+        except Exception:
+            pass
+        return None
+
     def close(self) -> None:
         """Close the DuckDB connection."""
         if self._connection:

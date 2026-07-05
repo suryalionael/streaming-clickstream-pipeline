@@ -140,6 +140,22 @@ page_view → search → category_view → product_view → add_to_cart
 
 The synthetic generator simulates realistic customer journeys using a state machine: users browse, search, view products, add to cart, proceed through checkout, and purchase. Abandonment and conversion rates are configurable.
 
+## Observability
+
+The **Pipeline Health** page in the dashboard provides live operational metrics:
+
+| Metric | Source | Indicator |
+|---|---|---|
+| Bronze / Silver / Gold row counts | DuckDB views over Delta tables | 🟢 > 0 rows, 🟡 0 rows |
+| Latest event timestamp per layer | `MAX(event_time)` query | 🟢 < 5 min old, 🟡 5–15 min, 🔴 > 15 min |
+| Events per second | `funnel_metrics` aggregate | 🟢 ≥ 1.0 eps, 🟡 < 1.0, 🔴 0 |
+| Dead-letter event count | Dead-letter Delta table | 🟢 0 (no failures) |
+| Kafka UI connectivity | HTTP `/actuator/health` | 🟢 HTTP 200, 🔴 unreachable |
+| MinIO connectivity | HTTP `/minio/health/live` | 🟢 HTTP 200, 🔴 unreachable |
+| DuckDB connection | Internal connection check | 🟢 connected, 🔴 disconnected |
+
+All metrics auto-refresh on the same interval as the dashboard.
+
 ## Project Structure
 
 ```
@@ -164,7 +180,7 @@ streaming-clickstream-pipeline/
 │       ├── funnel.py       # Conversion funnel visualization
 │       ├── geography.py    # Geographic distribution
 │       ├── products.py     # Product performance table
-│       └── infrastructure.py # System health
+│       └── infrastructure.py # Pipeline observability & health
 ├── storage/            # Data lake access layer
 │   ├── config.py       # Storage configuration
 │   └── queries.py      # DuckDB queries for dashboard

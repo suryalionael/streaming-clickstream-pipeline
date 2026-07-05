@@ -1,0 +1,19 @@
+
+Pipeline Observability Dashboard — Service Health
+==================================================
+=======================================================
+
+Service Health Checks (via HTTP):
+----------------------------------------
+  🟢 kafka-ui                  UP (HTTP 200)
+  🟢 minio                     UP (HTTP 200)
+  🟢 dashboard                 UP (HTTP 200)
+
+----------------------------------------
+Dashboard HTML size: 891 bytes
+Found sections: 
+
+The Infrastructure page renders with live metrics pulled from DuckDB
+views over Delta Lake tables. When the views are empty (no data yet),
+all row counts show 0 and the status shows WARNING (🟡) indicators.
+When data is available, counts and freshness timestamps populate.
