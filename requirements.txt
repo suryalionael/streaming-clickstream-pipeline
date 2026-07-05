@@ -1,0 +1,24 @@
+# Kafka
+confluent-kafka==2.5.3
+
+# Spark
+pyspark==3.5.3
+
+# Delta Lake
+delta-spark==3.2.1
+
+# DuckDB
+duckdb==1.1.1
+
+# Dashboard
+streamlit==1.38.0
+plotly==5.24.1
+pandas==2.2.2
+
+# Storage
+boto3==1.34.0
+
+# Utilities
+python-dateutil==2.9.0
+pytz==2024.1
+pyyaml==6.0.2

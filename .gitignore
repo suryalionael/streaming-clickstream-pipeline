@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Spark
+spark-warehouse/
+metastore_db/
+derby.log/
+checkpoints/
+
+# Delta Lake
+_delta_log/
+
+# MinIO data
+data/minio/
+
+# Kafka data
+data/kafka/
+data/zookeeper/
+
+# Docker
+.docker/
+docker-compose.override.yml
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Mypy
+.mypy_cache/
+
+# Ruff
+.ruff_cache/
+
+# Environment
+.env
+
+# DuckDB
+*.duckdb
+*.duckdb.wal
+
+# Logs
+*.log
+logs/

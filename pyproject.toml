@@ -1,0 +1,82 @@
+[project]
+name = "streaming-clickstream-pipeline"
+version = "1.0.0"
+description = "Real-time streaming analytics pipeline for e-commerce clickstream data"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.5",
+    "black>=24.0",
+    "isort>=5.13",
+    "mypy>=1.10",
+    "pre-commit>=3.8",
+    "pytest-mock>=3.14",
+]
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+line_length = 100
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "PL", "RUF"]
+ignore = ["PLR2004", "RUF012", "N812", "PLC0415"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["PLR0913", "SIM102", "SIM108", "SIM103", "E501"]
+"producer/generator.py" = ["PLR0912", "PLR0915", "SIM102", "SIM108", "RUF059"]
+"producer/models.py" = ["PLR0913"]
+"spark/transforms.py" = ["E501"]
+"spark/streaming.py" = ["E501"]
+"storage/queries.py" = ["SIM105"]
+"dashboard/components/*" = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = true
+disallow_untyped_defs = false
+disallow_any_unimported = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short --strict-markers"
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "slow: Slow tests",
+    "docker: Docker smoke tests",
+]
+
+[tool.coverage.run]
+source = ["producer", "spark", "dashboard", "storage"]
+omit = ["*/tests/*", "*/__pycache__/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "def __repr__",
+    "def __str__",
+]
