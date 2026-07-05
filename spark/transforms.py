@@ -1,10 +1,7 @@
 """Transform functions for the streaming pipeline."""
 
-from datetime import datetime, timezone
-
-from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
-from pyspark.sql.types import StringType
 
 from spark.schemas import VALID_EVENT_TYPES
 
@@ -17,15 +14,10 @@ def parse_event_time(df: DataFrame) -> DataFrame:
     )
 
 
-def add_ingestion_metadata(df: DataFrame) -> DataFrame:
-    """Add ingestion timestamp and partition columns."""
-    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+def add_partition_columns(df: DataFrame) -> DataFrame:
+    """Add year/month/day/hour partition columns from event_timestamp."""
     return (
-        df.withColumn("ingestion_timestamp", F.lit(now))
-        .withColumn(
-            "event_timestamp", F.to_timestamp(F.col("event_time"), "yyyy-MM-dd'T'HH:mm:ss'Z'")
-        )
-        .withColumn("year", F.year("event_timestamp"))
+        df.withColumn("year", F.year("event_timestamp"))
         .withColumn("month", F.month("event_timestamp"))
         .withColumn("day", F.dayofmonth("event_timestamp"))
         .withColumn("hour", F.hour("event_timestamp"))
@@ -46,10 +38,16 @@ def add_event_flags(df: DataFrame) -> DataFrame:
         .withColumn("is_cart_add", F.col("event_type") == "add_to_cart")
         .withColumn("is_page_view", F.col("event_type") == "page_view")
         .withColumn(
-            "is_checkout", F.col("event_type").isin("begin_checkout", "payment", "purchase")
+            "is_checkout",
+            F.col("event_type").isin("begin_checkout", "payment", "purchase"),
         )
-        .withColumn("is_bounce", F.lit(False))  # Calculated at session level
+        .withColumn("is_bounce", F.lit(False))
     )
+
+
+def deduplicate_events(df: DataFrame) -> DataFrame:
+    """Remove duplicate events by event_id (for idempotent processing)."""
+    return df.dropDuplicates(["event_id"])
 
 
 def validate_event(df: DataFrame) -> tuple[DataFrame, DataFrame]:
@@ -87,11 +85,14 @@ def clean_and_enrich(df: DataFrame) -> DataFrame:
 
 
 def compute_funnel_metrics(
-    df: DataFrame, window_duration: str = "5 minutes", slide_duration: str = "5 minutes"
+    df: DataFrame,
+    window_duration: str = "5 minutes",
+    slide_duration: str = "5 minutes",
+    watermark_delay: str = "60 minutes",
 ) -> DataFrame:
-    """Compute funnel metrics over tumbling windows."""
+    """Compute funnel metrics over tumbling windows with watermarking."""
     return (
-        df.withWatermark("event_timestamp", "60 minutes")
+        df.withWatermark("event_timestamp", watermark_delay)
         .groupBy(
             F.window("event_timestamp", window_duration, slide_duration).alias("window"),
             F.col("year"),
@@ -103,25 +104,24 @@ def compute_funnel_metrics(
             F.count(F.when(F.col("event_type") == "page_view", 1)).alias("page_views"),
             F.count(F.when(F.col("event_type") == "product_view", 1)).alias("product_views"),
             F.count(F.when(F.col("event_type") == "add_to_cart", 1)).alias("add_to_carts"),
-            F.count(F.when(F.col("event_type").isin("begin_checkout", "payment"), 1)).alias(
-                "checkout_starts"
-            ),
+            F.count(
+                F.when(F.col("event_type").isin("begin_checkout", "payment"), 1)
+            ).alias("checkout_starts"),
             F.count(F.when(F.col("event_type") == "purchase", 1)).alias("purchases"),
             F.countDistinct("session_id").alias("sessions"),
             F.countDistinct("user_id").alias("unique_users"),
-            F.avg(F.when(F.col("event_type") == "add_to_cart", F.col("cart_value"))).alias(
-                "avg_cart_value"
-            ),
-            F.sum(F.when(F.col("event_type") == "purchase", F.col("cart_value"))).alias(
-                "total_revenue"
-            ),
+            F.avg(
+                F.when(F.col("event_type") == "add_to_cart", F.col("cart_value"))
+            ).alias("avg_cart_value"),
+            F.sum(
+                F.when(F.col("event_type") == "purchase", F.col("cart_value"))
+            ).alias("total_revenue"),
         )
         .withColumn(
             "conversion_rate",
-            F.when(
-                F.col("add_to_carts") > 0,
-                F.col("purchases") / F.col("add_to_carts"),
-            ).otherwise(0.0),
+            F.when(F.col("add_to_carts") > 0, F.col("purchases") / F.col("add_to_carts")).otherwise(
+                0.0
+            ),
         )
         .withColumn(
             "abandonment_rate",
@@ -134,17 +134,21 @@ def compute_funnel_metrics(
             "events_per_second",
             (F.col("page_views") + F.col("product_views") + F.col("add_to_carts")) / 300.0,
         )
-        .withColumn("window_start", F.col("window.start").cast(StringType()))
-        .withColumn("window_end", F.col("window.end").cast(StringType()))
+        .withColumn("window_start", F.col("window.start").cast("string"))
+        .withColumn("window_end", F.col("window.end").cast("string"))
         .drop("window")
     )
 
 
-def compute_product_performance(df: DataFrame, window_duration: str = "5 minutes") -> DataFrame:
+def compute_product_performance(
+    df: DataFrame,
+    window_duration: str = "5 minutes",
+    watermark_delay: str = "60 minutes",
+) -> DataFrame:
     """Compute product-level performance metrics."""
     return (
         df.filter(F.col("product_id").isNotNull())
-        .withWatermark("event_timestamp", "60 minutes")
+        .withWatermark("event_timestamp", watermark_delay)
         .groupBy(
             F.window("event_timestamp", window_duration).alias("window"),
             "product_id",
@@ -155,9 +159,7 @@ def compute_product_performance(df: DataFrame, window_duration: str = "5 minutes
             "hour",
         )
         .agg(
-            F.count(F.when(F.col("event_type").isin("product_view", "page_view"), 1)).alias(
-                "views"
-            ),
+            F.count(F.when(F.col("event_type").isin("product_view", "page_view"), 1)).alias("views"),
             F.count(F.when(F.col("event_type") == "add_to_cart", 1)).alias("add_to_carts"),
             F.count(F.when(F.col("event_type") == "purchase", 1)).alias("purchases"),
             F.sum(F.when(F.col("event_type") == "purchase", F.col("cart_value"))).alias("revenue"),
@@ -166,16 +168,20 @@ def compute_product_performance(df: DataFrame, window_duration: str = "5 minutes
             "conversion_rate",
             F.when(F.col("views") > 0, F.col("purchases") / F.col("views")).otherwise(0.0),
         )
-        .withColumn("window_start", F.col("window.start").cast(StringType()))
-        .withColumn("window_end", F.col("window.end").cast(StringType()))
+        .withColumn("window_start", F.col("window.start").cast("string"))
+        .withColumn("window_end", F.col("window.end").cast("string"))
         .drop("window")
     )
 
 
-def compute_traffic_analytics(df: DataFrame, window_duration: str = "5 minutes") -> DataFrame:
+def compute_traffic_analytics(
+    df: DataFrame,
+    window_duration: str = "5 minutes",
+    watermark_delay: str = "60 minutes",
+) -> DataFrame:
     """Compute traffic analytics by country, source, device."""
     return (
-        df.withWatermark("event_timestamp", "60 minutes")
+        df.withWatermark("event_timestamp", watermark_delay)
         .groupBy(
             F.window("event_timestamp", window_duration).alias("window"),
             "country",
@@ -196,18 +202,7 @@ def compute_traffic_analytics(df: DataFrame, window_duration: str = "5 minutes")
             "conversion_rate",
             F.when(F.col("visits") > 0, F.col("purchases") / F.col("visits")).otherwise(0.0),
         )
-        .withColumn("window_start", F.col("window.start").cast(StringType()))
-        .withColumn("window_end", F.col("window.end").cast(StringType()))
+        .withColumn("window_start", F.col("window.start").cast("string"))
+        .withColumn("window_end", F.col("window.end").cast("string"))
         .drop("window")
     )
-
-
-def write_dead_letter(spark: SparkSession, df: DataFrame, topic: str) -> None:
-    """Write invalid events to dead letter Kafka topic."""
-    if df.count() > 0:
-        df.select(
-            F.to_json(F.struct("*")).alias("value"),
-            F.col("event_id").alias("key"),
-        ).write.format("kafka").option("topic", topic).option(
-            "kafka.bootstrap.servers", "localhost:9092"
-        ).save()

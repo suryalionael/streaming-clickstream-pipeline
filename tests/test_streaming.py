@@ -8,7 +8,8 @@ class TestStreamingPipeline:
         config = SparkConfig()
         assert config.app_name == "ClickstreamStreamingPipeline"
         assert config.batch_duration >= 1
-        assert config.watermark_delay >= 1
+        assert config.watermark_delay_minutes >= 1
+        assert "minutes" in config.watermark_delay
 
     def test_config_kafka_settings(self) -> None:
         from spark.config import SparkConfig

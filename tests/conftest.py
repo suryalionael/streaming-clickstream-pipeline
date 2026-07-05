@@ -1,7 +1,7 @@
-"""Shared test fixtures."""
+"""Shared test fixtures for the clickstream pipeline test suite."""
 
 import random
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -32,7 +32,7 @@ def generator(generator_config: GeneratorConfig) -> ClickstreamGenerator:
 def sample_event() -> ClickstreamEvent:
     return ClickstreamEvent(
         event_id=str(uuid4()),
-        event_time=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        event_time=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         user_id="user_000001",
         session_id="sess_test_123",
         event_type="page_view",
@@ -62,16 +62,11 @@ def sample_events() -> list[ClickstreamEvent]:
     for i in range(10):
         event = ClickstreamEvent(
             event_id=str(uuid4()),
-            event_time=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            event_time=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             user_id=f"user_{i:06d}",
             session_id=f"sess_{i}_{uuid4().hex[:8]}",
             event_type=random.choice(
-                [
-                    "page_view",
-                    "product_view",
-                    "add_to_cart",
-                    "purchase",
-                ]
+                ["page_view", "product_view", "add_to_cart", "purchase"]
             ),
             page=random.choice(["/", "/products", "/cart", "/checkout"]),
             product_id=f"prod_{random.randint(1, 100):03d}",
@@ -99,7 +94,7 @@ def sample_events() -> list[ClickstreamEvent]:
 def sample_event_dict() -> dict[str, Any]:
     return {
         "event_id": str(uuid4()),
-        "event_time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "event_time": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "user_id": "user_000001",
         "session_id": "sess_test_456",
         "event_type": "purchase",
@@ -121,32 +116,3 @@ def sample_event_dict() -> dict[str, Any]:
         "experiment_group": "control",
         "is_logged_in": True,
     }
-
-
-@pytest.fixture
-def spark_session():
-    """Create a local Spark session for testing."""
-    try:
-        import findspark
-
-        findspark.init()
-    except ImportError:
-        pass
-
-    try:
-        from pyspark.sql import SparkSession
-
-        spark = (
-            SparkSession.builder.master("local[1]")
-            .appName("test")
-            .config("spark.sql.shuffle.partitions", "2")
-            .config("spark.sql.streaming.schemaInference", "true")
-            .config("spark.ui.showConsoleProgress", "false")
-            .config("spark.ui.enabled", "false")
-            .getOrCreate()
-        )
-        yield spark
-        spark.stop()
-    except Exception:
-        pytest.skip("Spark not available in test environment")
-        yield None

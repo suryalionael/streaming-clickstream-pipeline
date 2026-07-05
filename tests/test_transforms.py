@@ -7,20 +7,20 @@ import pytest
 class TestTransforms:
     """Integration-level Spark transform tests (run in Docker)."""
 
-    def test_parse_event_time(self):
+    def test_parse_event_time(self) -> None:
         pass
 
-    def test_validate_event(self):
+    def test_validate_event(self) -> None:
         pass
 
-    def test_clean_and_enrich(self):
+    def test_clean_and_enrich(self) -> None:
         pass
 
-    def test_compute_funnel_metrics(self):
+    def test_compute_funnel_metrics(self) -> None:
         pass
 
-    def test_compute_product_performance(self):
+    def test_compute_product_performance(self) -> None:
         pass
 
-    def test_compute_traffic_analytics(self):
+    def test_compute_traffic_analytics(self) -> None:
         pass

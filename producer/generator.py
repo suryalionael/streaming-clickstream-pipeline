@@ -1,9 +1,9 @@
-"""Realistic synthetic clickstream event generator."""
+"""Realistic synthetic clickstream event generator with state-machine customer journeys."""
 
 import logging
 import random
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from producer.config import GeneratorConfig
 from producer.models import ClickstreamEvent, SessionState
@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 def weighted_choice(items: list[dict], weight_key: str = "weight") -> dict:
+    """Select an item from a weighted list using roulette-wheel selection."""
     total = sum(item[weight_key] for item in items)
     r = random.uniform(0, total)
     cumulative = 0.0
@@ -28,24 +29,21 @@ class ClickstreamGenerator:
     def __init__(self, config: GeneratorConfig) -> None:
         self.config = config
         self.sessions: dict[str, SessionState] = {}
-        self.user_agents: dict[str, tuple[str, str, str]] = {}
-        self.base_time = datetime.now(timezone.utc)
+        self.base_time = datetime.now(UTC)
 
     def _get_or_create_session(self, user_id: str) -> SessionState:
-        if user_id in self.sessions:
-            session = self.sessions[user_id]
-            if session.has_purchased or session.session_depth > random.randint(5, 20):
-                # Session expired or completed
+        existing = self.sessions.get(user_id)
+        if existing is not None:
+            session = existing
+            if session.has_purchased or session.session_depth > random.randint(5, 25):
                 if random.random() < 0.7:
-                    del self.sessions[user_id]
                     return self._create_new_session(user_id)
             return session
 
         if len(self.sessions) > self.config.num_users * 3:
-            # Clean up oldest sessions
-            oldest = sorted(self.sessions.keys(), key=lambda k: self.sessions[k].started_at)[
-                : len(self.sessions) // 4
-            ]
+            oldest = sorted(
+                self.sessions.keys(), key=lambda k: self.sessions[k].started_at
+            )[: len(self.sessions) // 4]
             for k in oldest:
                 del self.sessions[k]
 
@@ -55,30 +53,25 @@ class ClickstreamGenerator:
         country_info = weighted_choice(self.config.countries)
         source_info = weighted_choice(self.config.traffic_sources)
 
-        device = random.choice(self.config.devices)
-        browser = random.choice(self.config.browsers)
         os_map = {
             "mobile": ["iOS", "Android"],
             "desktop": ["Windows", "macOS", "Linux"],
             "tablet": ["iOS", "Android"],
         }
-        # Device-appropriate OS selection
+
+        device = random.choice(self.config.devices)
+        browser = random.choice(self.config.browsers)
+
         possible_os = os_map.get(device, ["Windows", "macOS"])
         operating_system = random.choice(possible_os)
 
-        session_id = f"sess_{user_id}_{int(time.time() * 1000000)}"
-
-        # Evening/weekend users more likely to be on mobile
-        if random.random() < 0.3:
-            device = "mobile"
-            browser = "Chrome" if random.random() < 0.6 else "Safari"
-            operating_system = "iOS" if random.random() < 0.5 else "Android"
-
-        # Mobile-heavy traffic (60% mobile overall)
+        # Mobile-heavy traffic: 60% mobile for realistic e-commerce patterns
         if random.random() < 0.6:
             device = "mobile"
             browser = random.choice(self.config.browsers[:3])
             operating_system = random.choice(["iOS", "Android"])
+
+        session_id = f"sess_{user_id}_{int(time.time() * 1000000)}"
 
         session = SessionState(
             user_id=user_id,
@@ -98,23 +91,26 @@ class ClickstreamGenerator:
 
     def _get_campaign(self, source: str) -> str:
         campaigns = {
-            "direct": ["organic", "direct", "none"],
+            "direct": ["organic", "direct"],
             "organic_search": ["organic_seo", "brand_search", "generic_search"],
             "paid_search": ["google_ads", "bing_ads", "shopping_campaign"],
-            "social_media": ["instagram_campaign", "facebook_ads", "tiktok_promo", "twitter_ad"],
+            "social_media": [
+                "instagram_campaign",
+                "facebook_ads",
+                "tiktok_promo",
+                "twitter_ad",
+            ],
             "email": ["newsletter", "promo_email", "abandoned_cart", "welcome_series"],
             "referral": ["blog_referral", "partner_link", "review_site"],
         }
         return random.choice(campaigns.get(source, ["organic"]))
 
-    def _get_page_for_event(self, event_type: str, session: SessionState) -> str:
+    def _get_page_for_event(self, event_type: str) -> str:
         pages = {
             "page_view": [
                 "/",
                 "/products",
                 "/categories",
-                "/about",
-                "/contact",
                 "/sale",
                 "/new-arrivals",
                 "/deals",
@@ -124,6 +120,8 @@ class ClickstreamGenerator:
                 "/category/electronics",
                 "/category/clothing",
                 "/category/home_garden",
+                "/category/sports",
+                "/category/books",
             ],
             "product_view": ["/product/"],
             "add_to_cart": ["/product/"],
@@ -133,15 +131,16 @@ class ClickstreamGenerator:
             "purchase": ["/checkout/confirmation"],
             "logout": ["/logout"],
         }
-        base = pages.get(event_type, ["/"])
-        return random.choice(base)
+        return random.choice(pages.get(event_type, ["/"]))
 
     def _get_category(self, session: SessionState) -> str | None:
         if session.current_category:
             return session.current_category
         return random.choice(self.config.categories)
 
-    def _get_product(self, category: str | None = None) -> tuple[str | None, str | None, float]:
+    def _get_product(
+        self, category: str | None = None
+    ) -> tuple[str | None, str | None, float]:
         if category and category in self.config.products:
             product_list = self.config.products[category]
         else:
@@ -150,7 +149,6 @@ class ClickstreamGenerator:
             category = cat
 
         product = random.choice(product_list)
-        # Realistic price ranges by category
         price_ranges = {
             "electronics": (9.99, 2499.99),
             "clothing": (14.99, 299.99),
@@ -167,41 +165,114 @@ class ClickstreamGenerator:
         price = round(random.uniform(*price_range), 2)
         return product, category, price
 
+    @staticmethod
+    def _transition_event_type(
+        last_event_type: str, is_converting: bool
+    ) -> str | None:
+        """Determine next event type using a state machine."""
+        # Threshold tables: (threshold, event) pairs per source state.
+        # A random r is generated per source; the first threshold r < t wins.
+        trans: dict[str, list[tuple[float, str]]] = {
+            "page_view": [
+                (0.30, "search"),
+                (0.55, "category_view"),
+                (0.80, "product_view"),
+                (1.01, "page_view"),
+            ],
+            "search": [
+                (0.60, "product_view"),
+                (0.85, "category_view"),
+                (1.01, "page_view"),
+            ],
+            "category_view": [
+                (0.65, "product_view"),
+                (0.80, "search"),
+                (1.01, "page_view"),
+            ],
+            "product_view": [
+                (0.35, "add_to_cart"),
+                (0.55, "product_view"),
+                (0.65, "category_view"),
+                (1.01, "page_view"),
+            ],
+            "add_to_cart": [
+                (0.35, "product_view"),
+                (0.50, "remove_from_cart"),
+                (0.70 if is_converting else 0.30, "begin_checkout"),
+                (1.01, "page_view"),
+            ],
+            "remove_from_cart": [
+                (0.40, "product_view"),
+                (0.60 if is_converting else 0.35, "add_to_cart"),
+                (0.75, "begin_checkout"),
+                (1.01, "page_view"),
+            ],
+            "begin_checkout": [
+                (0.85 if is_converting else 0.30, "payment"),
+                (0.50, "page_view"),
+                (1.01, "add_to_cart"),
+            ],
+            "payment": [(1.01, "purchase" if is_converting else "page_view")],
+            "purchase": [
+                (0.50, "logout"),
+                (1.01, "page_view"),
+            ],
+            "logout": [(1.01, "__END__")],
+        }
+
+        if last_event_type not in trans:
+            return "page_view"
+
+        table = trans[last_event_type]
+        r = random.random()
+        for threshold, event in table:
+            if r < threshold:
+                return None if event == "__END__" else event
+        return None
+
     def _get_next_event(self, session: SessionState) -> ClickstreamEvent | None:
         """Determine the next event in the user journey based on current state."""
-        # Session depth tracking
         session.session_depth += 1
 
-        # Abandonment check
-        if session.session_depth > 2 and random.random() < self.config.abandonment_rate * 0.1:
-            if not session.has_purchased and random.random() < 0.3:
-                return None  # User leaves
+        # Abandonment: users who haven't purchased may leave after page_view
+        if (
+            session.session_depth > 2
+            and not session.has_purchased
+            and random.random() < self.config.abandonment_rate * 0.1
+            and random.random() < 0.3
+        ):
+            return None
 
-        # Conversion check
-        is_converting = random.random() < self.config.conversion_rate
+        # Compute conversion probability with traffic source bonus
         source_info = next(
-            (s for s in self.config.traffic_sources if s["source"] == session.traffic_source),
+            (
+                s
+                for s in self.config.traffic_sources
+                if s["source"] == session.traffic_source
+            ),
             None,
         )
-        if source_info:
-            is_converting = random.random() < (
-                self.config.conversion_rate + source_info["conversion_bonus"]
-            )
+        effective_conversion = self.config.conversion_rate + (
+            source_info["conversion_bonus"] if source_info else 0.0
+        )
+        is_converting = random.random() < effective_conversion
 
-        # State machine for user journey
+        # First event in session is always page_view
         if not session.events:
-            event_type = "page_view"
-            page = random.choice(["/", "/products", "/new-arrivals", "/sale"])
             event = ClickstreamEvent.create(
-                event_type=event_type,
+                event_type="page_view",
                 user_id=session.user_id,
                 session_id=session.session_id,
-                page=page,
+                page=random.choice(
+                    ["/", "/products", "/new-arrivals", "/sale", "/deals"]
+                ),
                 country=session.country,
                 city=session.city,
                 traffic_source=session.traffic_source,
                 campaign=session.campaign,
-                referrer=random.choice(["google.com", "facebook.com", "direct", "email.com"]),
+                referrer=random.choice(
+                    ["google.com", "facebook.com", "direct", "email.com"]
+                ),
                 device=session.device,
                 browser=session.browser,
                 operating_system=session.operating_system,
@@ -211,135 +282,59 @@ class ClickstreamGenerator:
             session.events.append(event)
             return event
 
-        last_event = session.events[-1]
-        event_type = last_event.event_type
+        # State machine transition from last event
+        last_event_type = session.events[-1].event_type
+        next_type = self._transition_event_type(last_event_type, is_converting)
 
-        # Journey progression
-        # After page_view -> could search, browse category, or view product
-        if event_type == "page_view":
-            r = random.random()
-            if r < 0.3:
-                event_type = "search"
-            elif r < 0.55:
-                event_type = "category_view"
-            elif r < 0.75:
-                event_type = "product_view"
-            else:
-                event_type = "page_view"
+        if next_type is None:
+            return None
 
-        elif event_type == "search":
-            if random.random() < 0.6:
-                event_type = "product_view"
-            elif random.random() < 0.3:
-                event_type = "category_view"
-            else:
-                event_type = "page_view"
-
-        elif event_type == "category_view":
-            if random.random() < 0.6:
-                event_type = "product_view"
-            elif random.random() < 0.2:
-                event_type = "search"
-            else:
-                event_type = "page_view"
-
-        elif event_type == "product_view":
-            if random.random() < 0.3:
-                event_type = "add_to_cart"
-            elif random.random() < 0.2:
-                event_type = "product_view"  # View another product
-            elif random.random() < 0.1:
-                event_type = "category_view"
-            else:
-                event_type = "page_view"
-
-        elif event_type == "add_to_cart":
-            if random.random() < 0.4:
-                event_type = "product_view"
-            elif random.random() < 0.2:
-                event_type = "remove_from_cart"
-            elif random.random() < 0.2 and is_converting:
-                event_type = "begin_checkout"
-            else:
-                event_type = "page_view"
-
-        elif event_type == "remove_from_cart":
-            if random.random() < 0.4:
-                event_type = "product_view"
-            elif random.random() < 0.2 and is_converting:
-                event_type = "add_to_cart"
-            elif random.random() < 0.2:
-                event_type = "begin_checkout"
-            else:
-                event_type = "page_view"
-
-        elif event_type == "begin_checkout":
-            if random.random() < 0.8 and is_converting:
-                event_type = "payment"
-            elif random.random() < 0.1:
-                event_type = "page_view"
-            else:
-                event_type = "add_to_cart"
-
-        elif event_type == "payment":
-            if is_converting:
-                event_type = "purchase"
-            else:
-                event_type = "page_view"  # Payment failed, go back
-
-        elif event_type == "purchase":
-            session.has_purchased = True
-            event_type = "logout" if random.random() < 0.5 else "page_view"
-
-        elif event_type == "logout":
-            return None  # Session ends
-
-        else:
-            event_type = "page_view"
-
-        # Generate event details
-        page = self._get_page_for_event(event_type, session)
+        # Build the event payload
+        page = self._get_page_for_event(next_type)
         category = self._get_category(session)
-        product_id, cat, price = self._get_product(category)
+        product_id, cat_out, price = self._get_product(category)
 
-        # Update session category if browsing a category
-        if event_type == "category_view":
+        if next_type == "category_view":
             session.current_category = category
 
         quantity = 0
         cart_value = session.cart_value
 
-        if event_type in ("add_to_cart", "purchase"):
+        if next_type in ("add_to_cart", "purchase"):
             quantity = random.randint(1, 3)
             session.cart_value += price * quantity
             session.cart_items.append(
-                {"product_id": product_id, "price": price, "quantity": quantity}
+                {
+                    "product_id": product_id,
+                    "product_name": cat_out,
+                    "price": price,
+                    "quantity": quantity,
+                }
             )
             cart_value = session.cart_value
 
-        elif event_type == "remove_from_cart":
+        elif next_type == "remove_from_cart":
             if session.cart_items:
                 removed = session.cart_items.pop()
                 session.cart_value -= removed["price"] * removed["quantity"]
                 cart_value = session.cart_value
                 quantity = -removed["quantity"]
 
-        elif event_type == "purchase":
+        elif next_type == "purchase":
             cart_value = session.cart_value
 
-        elif event_type == "begin_checkout":
-            pass
-
-        # Track pages/products visited
+        # Track page visits
         if page not in session.pages_visited:
             session.pages_visited.append(page)
         if product_id and product_id not in session.products_viewed:
             session.products_viewed.append(product_id)
-        if event_type == "search":
+        if next_type == "search":
             session.searches += 1
+        if next_type == "purchase":
+            session.has_purchased = True
 
         event = ClickstreamEvent.create(
-            event_type=event_type,
+            event_type=next_type,
             user_id=session.user_id,
             session_id=session.session_id,
             page=page,
@@ -374,7 +369,7 @@ class ClickstreamGenerator:
         """Generate a single clickstream event."""
         max_attempts = 100
         for _ in range(max_attempts):
-            if self.sessions and random.random() < 0.8:
+            if self.sessions and random.random() < 0.85:
                 user_id = random.choice(list(self.sessions.keys()))
             else:
                 user_id = f"user_{random.randint(1, self.config.num_users):06d}"
@@ -404,12 +399,20 @@ class ClickstreamGenerator:
             return True
         if self.config.black_friday_mode:
             return random.random() < 0.02
-        return random.random() < 0.01  # Random spikes
+        return random.random() < 0.003
 
     def get_burst_multiplier(self) -> int:
-        base = self.config.burst_multiplier if self.config.burst_mode else 2
+        """Get traffic burst multiplier based on current mode."""
         if self.config.black_friday_mode:
+            base = self.config.burst_multiplier if self.config.burst_mode else 3
+            if random.random() < 0.02:
+                return base * 5
             return base * 3
+        if self.config.burst_mode and self.should_burst():
+            base = self.config.burst_multiplier
+            if random.random() < 0.01:
+                return base * 4
+            return base
         if random.random() < 0.003:
-            return base * 4  # Flash sale
-        return base if self.should_burst() else 1
+            return 4  # Rare flash sale spike
+        return 1 if random.random() < 0.99 else 2

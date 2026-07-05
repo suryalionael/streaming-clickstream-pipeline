@@ -146,6 +146,23 @@ traffic_analytics_schema = StructType(
     ]
 )
 
+# Dead-letter schema for invalid/unparseable events
+dead_letter_schema = StructType(
+    [
+        StructField("raw_key", StringType(), True),
+        StructField("raw_value", StringType(), True),
+        StructField("kafka_topic", StringType(), True),
+        StructField("kafka_partition", IntegerType(), True),
+        StructField("kafka_offset", IntegerType(), True),
+        StructField("failure_reason", StringType(), False),
+        StructField("failure_timestamp", StringType(), False),
+        StructField("year", IntegerType(), False),
+        StructField("month", IntegerType(), False),
+        StructField("day", IntegerType(), False),
+        StructField("hour", IntegerType(), False),
+    ]
+)
+
 # Valid event types for validation
 VALID_EVENT_TYPES = {
     "page_view",

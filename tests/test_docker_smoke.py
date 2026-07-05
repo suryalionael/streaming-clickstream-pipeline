@@ -1,7 +1,19 @@
 """Docker smoke tests to verify all services are running."""
 
+import subprocess
+
 import pytest
 import requests
+
+pytestmark = pytest.mark.skipif(
+    subprocess.run(
+        ["docker", "info"],
+        capture_output=True,
+        text=True,
+        check=False,
+    ).returncode != 0,
+    reason="Docker daemon not available",
+)
 
 
 @pytest.mark.docker
@@ -13,10 +25,8 @@ class TestDockerSmoke:
         self.base_urls = {
             "kafka_ui": "http://localhost:8080",
             "minio_api": "http://localhost:9000",
-            "minio_console": "http://localhost:9001",
             "dashboard": "http://localhost:8501",
         }
-        self.timeout = 120
 
     def _check_url(self, url: str, timeout: int = 10) -> bool:
         try:
@@ -53,8 +63,6 @@ class TestDockerSmoke:
         ), f"Topic clickstream-events not found. Topics: {topic_names}"
 
     def test_all_containers_running(self) -> None:
-        import subprocess
-
         result = subprocess.run(
             ["docker", "compose", "ps", "--format", "json"],
             capture_output=True,
@@ -64,14 +72,11 @@ class TestDockerSmoke:
         )
         assert result.returncode == 0, "Docker compose ps failed"
 
-        # Check all services are running
         services = ["zookeeper", "kafka", "kafka-ui", "minio", "producer", "spark", "dashboard"]
         for service in services:
             assert service in result.stdout.lower(), f"Service {service} not found in compose"
 
     def test_logs_no_crashes(self) -> None:
-        import subprocess
-
         result = subprocess.run(
             ["docker", "compose", "logs", "--tail=50", "producer"],
             capture_output=True,

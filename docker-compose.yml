@@ -1,11 +1,35 @@
+# SECURITY WARNING: MinIO, Kafka, and other services use default credentials.
+# Override via .env file for any non-local deployment.
+# See .env.example for all configurable values.
+
 x-logging: &default-logging
   driver: "json-file"
   options:
     max-size: "10m"
     max-file: "3"
 
+x-kafka-env: &kafka-env
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  KAFKA_TOPIC_CLICKSTREAM: clickstream-events
+  KAFKA_TOPIC_DEAD_LETTER: clickstream-dead-letter
+
+x-spark-env: &spark-env
+  <<: *kafka-env
+  SPARK_MASTER: local[*]
+  SPARK_BATCH_DURATION: 10
+  SPARK_CHECKPOINT_DIR: /opt/spark/app/checkpoints
+  SPARK_WATERMARK_DELAY_MINUTES: 60
+  SPARK_WINDOW_INTERVAL: 5
+  MINIO_ENDPOINT: http://minio:9000
+  MINIO_ACCESS_KEY: minioadmin
+  MINIO_SECRET_KEY: minioadmin
+  MINIO_BUCKET: clickstream-lake
+  DELTA_BRONZE_PATH: /opt/spark/app/data/bronze
+  DELTA_SILVER_PATH: /opt/spark/app/data/silver
+  DELTA_GOLD_PATH: /opt/spark/app/data/gold
+  DELTA_DEAD_LETTER_PATH: /opt/spark/app/data/dead_letter
+
 services:
-  # === Zookeeper ===
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.1
     hostname: zookeeper
@@ -23,11 +47,10 @@ services:
       test: echo srvr | nc -w 2 localhost 2181 || exit 1
       interval: 15s
       timeout: 5s
-      retries: 5
+      retries: 10
       start_period: 30s
     logging: *default-logging
 
-  # === Kafka ===
   kafka:
     image: confluentinc/cp-kafka:7.6.1
     hostname: kafka
@@ -61,15 +84,13 @@ services:
     healthcheck:
       test: nc -z localhost 9092 || exit 1
       interval: 15s
-      timeout: 5s
-      retries: 5
+      timeout: 10s
+      retries: 10
       start_period: 60s
     logging: *default-logging
 
-  # === Kafka UI ===
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
-    hostname: kafka-ui
     container_name: clickstream-kafka-ui
     restart: unless-stopped
     depends_on:
@@ -82,18 +103,10 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
       KAFKA_CLUSTERS_0_READONLY: "false"
-    healthcheck:
-      test: wget -qO- http://localhost:8080/actuator/health || exit 1
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
     logging: *default-logging
 
-  # === MinIO ===
   minio:
     image: minio/minio:latest
-    hostname: minio
     container_name: clickstream-minio
     restart: unless-stopped
     ports:
@@ -109,14 +122,12 @@ services:
       test: curl -f http://localhost:9000/minio/health/live || exit 1
       interval: 15s
       timeout: 5s
-      retries: 5
+      retries: 10
       start_period: 30s
     logging: *default-logging
 
-  # === MinIO Init (create buckets) ===
   minio-init:
     image: minio/mc:latest
-    hostname: minio-init
     container_name: clickstream-minio-init
     restart: "no"
     depends_on:
@@ -124,52 +135,39 @@ services:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      sleep 5;
+      sleep 3;
       mc alias set myminio http://minio:9000 minioadmin minioadmin;
       mc mb myminio/clickstream-lake --ignore-existing;
-      mc policy set public myminio/clickstream-lake;
       echo 'MinIO bucket created';
       exit 0;
       "
     logging: *default-logging
 
-  # === Clickstream Producer ===
   producer:
     build:
       context: .
       dockerfile: docker/producer/Dockerfile
-    hostname: producer
     container_name: clickstream-producer
     restart: unless-stopped
     depends_on:
       kafka:
         condition: service_healthy
     environment:
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      KAFKA_TOPIC_CLICKSTREAM: clickstream-events
-      KAFKA_TOPIC_DEAD_LETTER: clickstream-dead-letter
-      EVENTS_PER_SECOND: 50
-      NUM_USERS: 1000
+      <<: *kafka-env
+      EVENTS_PER_SECOND: "50"
+      NUM_USERS: "1000"
       ABANDONMENT_RATE: "0.7"
       CONVERSION_RATE: "0.05"
       BURST_MODE: "true"
       BLACK_FRIDAY_MODE: "false"
       LOG_LEVEL: INFO
       LOG_FORMAT: json
-    healthcheck:
-      test: python -c "import confluent_kafka; print('ok')" || exit 1
-      interval: 30s
-      timeout: 10s
-      start_period: 30s
-      retries: 3
     logging: *default-logging
 
-  # === Spark Streaming ===
   spark:
     build:
       context: .
       dockerfile: docker/spark/Dockerfile
-    hostname: spark
     container_name: clickstream-spark
     restart: unless-stopped
     depends_on:
@@ -177,40 +175,19 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-      producer:
-        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
     environment:
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      KAFKA_TOPIC_CLICKSTREAM: clickstream-events
-      KAFKA_TOPIC_DEAD_LETTER: clickstream-dead-letter
-      SPARK_MASTER: local[*]
-      SPARK_BATCH_DURATION: 10
-      SPARK_CHECKPOINT_DIR: /opt/spark/checkpoints
-      SPARK_WATERMARK_DELAY: 60
-      MINIO_ENDPOINT: http://minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET: clickstream-lake
-      DELTA_BRONZE_PATH: /opt/spark/data/bronze
-      DELTA_SILVER_PATH: /opt/spark/data/silver
-      DELTA_GOLD_PATH: /opt/spark/data/gold
+      <<: *spark-env
     volumes:
-      - spark-data:/opt/spark/data
-      - spark-checkpoints:/opt/spark/checkpoints
-    healthcheck:
-      test: python3 -c "import pyspark; print('ok')" || exit 1
-      interval: 30s
-      timeout: 15s
-      start_period: 120s
-      retries: 3
+      - spark-data:/opt/spark/app/data
+      - spark-checkpoints:/opt/spark/app/checkpoints
     logging: *default-logging
 
-  # === Streamlit Dashboard ===
   dashboard:
     build:
       context: .
       dockerfile: docker/dashboard/Dockerfile
-    hostname: dashboard
     container_name: clickstream-dashboard
     restart: unless-stopped
     depends_on:
@@ -219,23 +196,11 @@ services:
     ports:
       - "8501:8501"
     environment:
-      DASHBOARD_REFRESH_INTERVAL: 5
+      <<: *spark-env
+      DASHBOARD_REFRESH_INTERVAL: "5"
       DUCKDB_PATH: /app/data/metrics.duckdb
-      MINIO_ENDPOINT: http://minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET: clickstream-lake
-      DELTA_BRONZE_PATH: /opt/spark/data/bronze
-      DELTA_SILVER_PATH: /opt/spark/data/silver
-      DELTA_GOLD_PATH: /opt/spark/data/gold
     volumes:
       - dashboard-data:/app/data
-    healthcheck:
-      test: python -c "import streamlit; print('ok')" || exit 1
-      interval: 30s
-      timeout: 10s
-      start_period: 30s
-      retries: 3
     logging: *default-logging
 
 volumes:

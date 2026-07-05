@@ -3,6 +3,7 @@
 import json
 import logging
 import signal
+import threading
 import time
 from typing import Any
 
@@ -27,7 +28,7 @@ class KafkaProducerClient:
         self._producer: ConfluentProducer | None = None
         self._running = False
         self._shutdown = False
-        self._delivery_reports: dict[str, bool] = {}
+        self._shutdown_lock = threading.Lock()
         self._message_count = 0
         self._error_count = 0
         self._last_report_time = time.time()
@@ -45,17 +46,19 @@ class KafkaProducerClient:
                 extra={
                     "bootstrap_servers": self.config.bootstrap_servers,
                     "topic": self.config.topic,
+                    "partitions": self.config.partitions,
                 },
             )
         except Exception as e:
             raise KafkaProducerError(f"Failed to create Kafka producer: {e}") from e
 
     def _handle_signal(self, signum: int, _frame: Any) -> None:
-        """Handle shutdown signals gracefully."""
+        """Handle shutdown signals gracefully via flag (non-blocking)."""
         signal_name = signal.Signals(signum).name
         logger.info(f"Received {signal_name}, initiating graceful shutdown")
         self._shutdown = True
-        self.stop()
+        # Signal the main loop to stop instead of calling stop() from handler
+        self._running = False
 
     def _delivery_callback(self, err: Any, msg: Any) -> None:
         """Callback for Kafka delivery reports."""
@@ -71,9 +74,6 @@ class KafkaProducerClient:
             )
         else:
             self._message_count += 1
-            key = msg.key().decode() if msg and msg.key() else None
-            if key:
-                self._delivery_reports[key] = True
 
     def send(self, event: ClickstreamEvent, timeout: float = 10.0) -> bool:
         """Send an event to Kafka with retries."""
@@ -83,6 +83,7 @@ class KafkaProducerClient:
         event_dict = event.to_dict()
         key = event.event_id
         value = json.dumps(event_dict, default=str)
+        partition = hash(event.session_id) % max(self.config.partitions, 1)
 
         max_retries = 3
         for attempt in range(max_retries):
@@ -91,6 +92,7 @@ class KafkaProducerClient:
                     topic=self.config.topic,
                     key=key,
                     value=value,
+                    partition=partition,
                     headers={
                         "event_type": event.event_type,
                         "content_type": "application/json",
@@ -101,17 +103,26 @@ class KafkaProducerClient:
                 self._producer.poll(0)
                 return True
             except BufferError:
-                logger.warning(f"Producer queue full, flushing (attempt {attempt + 1})")
+                logger.warning(
+                    "Producer queue full, flushing",
+                    extra={"attempt": attempt + 1},
+                )
                 self._producer.flush(timeout)
             except KafkaException as e:
                 logger.error(
-                    f"Kafka error (attempt {attempt + 1}/{max_retries})",
-                    extra={"error": str(e)},
+                    "Kafka error sending event",
+                    extra={
+                        "attempt": attempt + 1,
+                        "max_retries": max_retries,
+                        "error": str(e),
+                    },
                 )
                 if attempt < max_retries - 1:
                     time.sleep(0.5 * (attempt + 1))
                 else:
-                    raise KafkaProducerError(f"Failed to send after {max_retries} retries") from e
+                    raise KafkaProducerError(
+                        f"Failed to send after {max_retries} retries"
+                    ) from e
         return False
 
     def send_batch(self, events: list[ClickstreamEvent]) -> int:
@@ -131,14 +142,21 @@ class KafkaProducerClient:
             return
         try:
             dead_letter_value = json.dumps(
-                {"original_event": event, "error": error, "timestamp": time.time()},
+                {
+                    "original_event": event,
+                    "error": error,
+                    "timestamp": time.time(),
+                },
                 default=str,
             )
             self._producer.produce(
                 topic=self.config.dead_letter_topic,
                 key=str(event.get("event_id", "unknown")),
                 value=dead_letter_value,
-                headers={"error_type": "schema_validation", "content_type": "application/json"},
+                headers={
+                    "error_type": "schema_validation",
+                    "content_type": "application/json",
+                },
             )
             self._producer.poll(0)
         except Exception as e:
@@ -150,17 +168,22 @@ class KafkaProducerClient:
             return 0
         remaining: int = self._producer.flush(timeout) or 0
         if remaining > 0:
-            logger.warning(f"{remaining} messages may not have been delivered")
+            logger.warning(
+                "Messages may not have been delivered",
+                extra={"remaining": remaining},
+            )
         return remaining
 
     def stop(self) -> None:
         """Graceful shutdown with final flush."""
-        if self._shutdown:
-            return
-        self._shutdown = True
+        with self._shutdown_lock:
+            if self._shutdown:
+                return
+            self._shutdown = True
+
         logger.info("Shutting down Kafka producer")
-        remaining = self.flush()
         self._running = False
+        remaining = self.flush()
         self._report_metrics()
         logger.info(
             "Kafka producer shutdown complete",
@@ -172,12 +195,12 @@ class KafkaProducerClient:
         elapsed = time.time() - self._last_report_time
         rate = self._message_count / elapsed if elapsed > 0 else 0
         logger.info(
-            "Producer metrics",
+            "Producer metrics summary",
             extra={
                 "messages_sent": self._message_count,
                 "errors": self._error_count,
-                "elapsed_seconds": round(elapsed, 2),
-                "messages_per_second": round(rate, 2),
+                "uptime_seconds": round(elapsed, 2),
+                "throughput_mps": round(rate, 2),
             },
         )
 

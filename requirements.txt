@@ -1,10 +1,7 @@
 # Kafka
 confluent-kafka==2.5.3
 
-# Spark
-pyspark==3.5.3
-
-# Delta Lake
+# Delta Lake (includes PySpark dependency)
 delta-spark==3.2.1
 
 # DuckDB

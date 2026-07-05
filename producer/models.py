@@ -1,7 +1,7 @@
 """Data models for clickstream events."""
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -58,7 +58,7 @@ class ClickstreamEvent:
     ) -> "ClickstreamEvent":
         return cls(
             event_id=str(uuid4()),
-            event_time=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            event_time=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             event_type=event_type,
             user_id=user_id,
             session_id=session_id,
@@ -132,7 +132,7 @@ class SessionState:
     cart_value: float = 0.0
     current_page: str = "/"
     current_category: str | None = None
-    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     has_purchased: bool = False
     traffic_source: str = "direct"
     campaign: str = "organic"

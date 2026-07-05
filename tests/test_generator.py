@@ -133,7 +133,7 @@ class TestClickstreamGenerator:
 
         events = gen.generate_batch(1000)
         # Count events by type
-        type_counts = {}
+        type_counts: dict[str, int] = {}
         for e in events:
             type_counts[e.event_type] = type_counts.get(e.event_type, 0) + 1
 
