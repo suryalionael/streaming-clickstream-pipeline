@@ -1,20 +1,35 @@
-<p align="center">
-  <img src="docs/images/architecture.svg" alt="Pipeline Architecture" width="800">
-</p>
+<div align="center">
+  <img src="docs/images/architecture.svg" alt="Pipeline Architecture" width="820">
+</div>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Python-3.12-blue?logo=python" alt="Python">
-  <img src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker" alt="Docker">
+  <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python" alt="Python">
   <img src="https://img.shields.io/badge/Apache%20Kafka-7.6-231F20?logo=apache-kafka" alt="Kafka">
   <img src="https://img.shields.io/badge/Spark%20Structured%20Streaming-3.5-E25A1C?logo=apache-spark" alt="Spark">
   <img src="https://img.shields.io/badge/Delta%20Lake-3.2-4BA92B?logo=delta" alt="Delta Lake">
+  <img src="https://img.shields.io/badge/DuckDB-FFF000?logo=duckdb" alt="DuckDB">
+  <img src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker" alt="Docker">
   <img src="https://img.shields.io/badge/GitHub%20Actions-CI/CD-2088FF?logo=github-actions" alt="CI/CD">
-  <img src="https://img.shields.io/badge/License-MIT-green" alt="License">
+  <img src="https://img.shields.io/badge/License-MIT-yellow" alt="License">
 </p>
 
 # Streaming Clickstream Pipeline
 
-A real-time streaming analytics pipeline for e-commerce clickstream data. Demonstrates production-grade data engineering patterns: event-driven architecture, stream processing, medallion lakehouse, and interactive dashboards.
+<p align="center">
+  Real-time streaming analytics for e-commerce clickstream data —<br>
+  Kafka → Spark Structured Streaming → Delta Lake → DuckDB → Streamlit
+</p>
+
+## Key Features
+
+- **Event-driven ingestion** — ~50 events/sec from a synthetic generator into Kafka with idempotent exactly-once semantics
+- **Stream processing** — Spark Structured Streaming with event-time processing, watermarking, and 10-second micro-batches
+- **Medallion lakehouse** — Bronze (raw) → Silver (clean/enriched) → Gold (aggregated) on Delta Lake with ACID transactions
+- **Real-time dashboard** — 6-page Streamlit dashboard with sparklines, conversion funnels, geographic heatmaps, and pipeline health monitoring
+- **Dead-letter queue** — Invalid messages captured with failure metadata for offline reprocessing
+- **Fault tolerance** — Checkpointing, graceful shutdown, consumer group rebalancing, and exactly-once semantics
+- **Dockerized** — One command to start all 7 services with health checks and persistent volumes
+- **CI/CD** — Automated linting, type checking, testing, and Docker build verification
 
 ## Business Problem
 

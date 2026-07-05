@@ -143,15 +143,15 @@ def _render_footer() -> None:
     from storage.config import config as storage_config
 
     now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
-    st.caption(f"Auto-refreshes every {storage_config.dashboard_refresh_interval}s · Last updated: {now}")
+    st.caption(
+        f"Auto-refreshes every {storage_config.dashboard_refresh_interval}s · Last updated: {now}"
+    )
 
 
 def render_infrastructure(store: MetricsStore | None = None) -> None:
     """Render the pipeline observability panel with live health data."""
     st.markdown("## Pipeline Health")
-    st.markdown(
-        "*Live operational metrics for the streaming pipeline*"
-    )
+    st.markdown("*Live operational metrics for the streaming pipeline*")
 
     health: dict[str, Any] = {}
     if store is not None:

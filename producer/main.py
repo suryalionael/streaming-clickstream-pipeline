@@ -20,7 +20,7 @@ def setup_logging() -> None:
         try:
             from pythonjsonlogger import jsonlogger
 
-            formatter: logging.Formatter = jsonlogger.JsonFormatter(  # type: ignore[no-untyped-call]
+            formatter: logging.Formatter = jsonlogger.JsonFormatter(
                 fmt="%(asctime)s %(name)s %(levelname)s %(message)s",
                 datefmt="%Y-%m-%dT%H:%M:%S",
             )
