@@ -88,12 +88,49 @@
 | Docker smoke | 6 | Service health, pipeline end-to-end (skipif no Docker) |
 | **Total** | **74** | |
 
-## Outstanding Issues
+## Production Readiness Assessment
 
-- `spark.sql.adaptive.enabled` warning in Spark logs (benign; AQE is not supported in streaming mode)
-- Delta checkpoint cleanup may need VACUUM policy for long-running pipelines
-- Docker Compose uses `depends_on` which does not wait for services to be ready (handled via health checks + retries)
+### Strengths
 
-## Overall Rating: **8.5/10**
+- **Medallion Architecture**: Bronze → Silver → Gold separation provides clear data lineage, incremental quality improvement, and independent scaling of each layer.
+- **Streaming Correctness**: Event-time processing with watermarking, exactly-once semantics via Delta Lake plus checkpointing, and idempotent writes ensure no data loss or duplication.
+- **Fault Tolerance**: Graceful shutdown via signal handlers, consumer group rebalancing on restart, and failed-batch exception handling with structured logging.
+- **Observability**: Structured JSON logging throughout, pipeline health status in the dashboard, and a dedicated dead-letter sink for unparseable messages.
+- **Test Coverage**: 74 tests spanning unit, edge case, Spark integration, and Docker smoke suites; linting and type checking in CI.
+- **Containerization**: All 7 services run in Docker Compose with health checks, persistent volumes, and dependency ordering.
 
-A well-structured streaming pipeline following medallion architecture best practices. Production-ready for development/staging environments. Recommended enhancements for production: secrets management, resource limits, authentication/TLS, and monitoring/alerting integration.
+### Architectural Decisions
+
+- **Single `foreachBatch` query**: Writing Bronze, Silver, and Gold from one streaming query avoids multiple Kafka consumer groups and simplifies checkpoint management. The trade-off is that all three layers share the same processing cadence.
+- **Delta Lake over raw Parquet**: Schema evolution, ACID transactions, and time travel justify the additional metadata overhead. For an analytics pipeline serving a dashboard, these features outweigh the simplicity of plain Parquet.
+- **DuckDB for serving**: Lighter than a full warehouse, faster than querying Delta directly from Spark, and zero-config for the dashboard container. The trade-off is that views must be re-created on restart.
+- **MinIO over cloud S3**: Enables reproducible local development. The S3A connector and MinIO are API-compatible, so switching to AWS S3 or GCS requires only config changes.
+
+### Limitations
+
+- **Authentication and Authorization**: Kafka, MinIO, and Streamlit run without authentication. In a production deployment, enable SASL/SCRAM for Kafka, IAM policies for S3, and SSO or basic auth for the dashboard.
+- **TLS**: All inter-service communication is plaintext. For production, configure TLS for Kafka, MinIO, and the dashboard.
+- **Resource Management**: Docker Compose services lack CPU/memory limits. In production, set resource reservations and limits to prevent noisy-neighbor issues.
+- **Alerting**: No automated alert rules exist. Integrate with PagerDuty, OpsGenie, or Prometheus Alertmanager for production monitoring.
+- **Delta Maintenance**: Long-running pipelines require periodic `VACUUM` and `OPTIMIZE` to manage small files and tombstone cleanup.
+
+### Production-Inspired Practices
+
+- **Idempotent Kafka Producer**: `enable.idempotence=true` prevents duplicate messages despite retries.
+- **Structured Logging**: JSON-formatted logs with consistent keys enable ingestion into ELK, Datadog, or Splunk.
+- **Dead Letter Queue**: Invalid messages are preserved with failure metadata, enabling offline analysis and reprocessing.
+- **Schema Evolution**: Delta's `mergeSchema=true` allows fields to be added without pipeline downtime.
+- **Partition Pruning**: Hive-style partitioning on all Delta tables enables efficient queries by time range.
+- **Container Health Checks**: Each service defines a health check endpoint; Docker Compose respects startup dependencies.
+- **Graceful Shutdown**: Signal handlers flush pending Kafka messages and close resources cleanly.
+
+### Future Improvements
+
+- Add RBAC and TLS for all services
+- Set resource limits in Docker Compose or Kubernetes manifests
+- Implement a Delta Lake maintenance job (VACUUM, OPTIMIZE, ZORDER)
+- Add Prometheus metrics endpoints and Grafana dashboards
+- Introduce CI/CD deployment to a cloud environment (AWS/GCP/Azure)
+- Implement backpressure-aware producer rate limiting
+- Add end-to-end data quality monitoring (row count SLAs, schema drift detection)
+- Integrate a schema registry (e.g., Confluent Schema Registry or Apicurio)

@@ -1,0 +1,11 @@
+Docker Containers - All Services Running
+=============================================
+NAME                           STATUS               PORTS
+--------------------------------------------------------------------------------
+clickstream-dashboard          Up 48 seconds (healthy) 0.0.0.0:8501->8501/tcp, [::]:8501->8501/tcp
+clickstream-kafka              Up 53 seconds (healthy) 0.0.0.0:9092-9093->9092-9093/tcp, [::]:9092-9093->9092-9093/tcp
+clickstream-kafka-ui           Up 48 seconds        0.0.0.0:8080->8080/tcp, [::]:8080->8080/tcp
+clickstream-minio              Up 59 seconds (healthy) 0.0.0.0:9000-9001->9000-9001/tcp, [::]:9000-9001->9000-9001/tcp
+clickstream-producer           Up 48 seconds (healthy) 
+clickstream-spark              Up 48 seconds (healthy) 
+clickstream-zookeeper          Up 59 seconds (healthy) 0.0.0.0:2181->2181/tcp, [::]:2181->2181/tcp

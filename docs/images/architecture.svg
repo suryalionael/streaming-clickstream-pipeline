@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 340" font-family="Monaco, monospace" font-size="13">
+  <defs>
+    <linearGradient id="box" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e8f4f8"/>
+      <stop offset="100%" style="stop-color:#d0eaf3"/>
+    </linearGradient>
+    <linearGradient id="kafka" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fff3e0"/>
+      <stop offset="100%" style="stop-color:#ffe0b2"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e8f5e9"/>
+      <stop offset="100%" style="stop-color:#c8e6c9"/>
+    </linearGradient>
+    <linearGradient id="delta" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fce4ec"/>
+      <stop offset="100%" style="stop-color:#f8bbd0"/>
+    </linearGradient>
+    <linearGradient id="duckdb" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e8eaf6"/>
+      <stop offset="100%" style="stop-color:#c5cae9"/>
+    </linearGradient>
+    <linearGradient id="dash" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f3e5f5"/>
+      <stop offset="100%" style="stop-color:#e1bee7"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#666"/>
+    </marker>
+  </defs>
+  <rect width="900" height="340" fill="#fafafa" rx="8"/>
+  <text x="450" y="30" text-anchor="middle" font-size="16" font-weight="bold" fill="#333">Streaming Clickstream Pipeline Architecture</text>
+
+  <!-- Producer -->
+  <rect x="20" y="80" width="130" height="70" rx="6" fill="url(#box)" stroke="#4fc3f7" stroke-width="2"/>
+  <text x="85" y="110" text-anchor="middle" font-size="14" font-weight="bold" fill="#0277bd">Producer</text>
+  <text x="85" y="130" text-anchor="middle" font-size="11" fill="#555">Synthetic Generator</text>
+  <text x="85" y="145" text-anchor="middle" font-size="10" fill="#888">~50 events/sec</text>
+
+  <!-- Arrow -->
+  <line x1="150" y1="115" x2="195" y2="115" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Kafka -->
+  <rect x="200" y="70" width="130" height="80" rx="6" fill="url(#kafka)" stroke="#ffa726" stroke-width="2"/>
+  <text x="265" y="100" text-anchor="middle" font-size="14" font-weight="bold" fill="#e65100">Apache Kafka</text>
+  <text x="265" y="120" text-anchor="middle" font-size="11" fill="#555">Message Broker</text>
+  <text x="265" y="135" text-anchor="middle" font-size="10" fill="#888">6 partitions</text>
+  <text x="265" y="148" text-anchor="middle" font-size="10" fill="#888">idempotent producer</text>
+
+  <!-- Arrow -->
+  <line x1="330" y1="115" x2="375" y2="115" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Spark -->
+  <rect x="380" y="60" width="150" height="90" rx="6" fill="url(#spark)" stroke="#66bb6a" stroke-width="2"/>
+  <text x="455" y="90" text-anchor="middle" font-size="14" font-weight="bold" fill="#2e7d32">Spark Structured</text>
+  <text x="455" y="108" text-anchor="middle" font-size="14" font-weight="bold" fill="#2e7d32">Streaming</text>
+  <text x="455" y="128" text-anchor="middle" font-size="11" fill="#555">foreachBatch</text>
+  <text x="455" y="143" text-anchor="middle" font-size="10" fill="#888">event-time + watermark</text>
+
+  <!-- Arrow -->
+  <line x1="530" y1="115" x2="575" y2="115" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Delta Lake -->
+  <rect x="580" y="60" width="130" height="90" rx="6" fill="url(#delta)" stroke="#e91e63" stroke-width="2"/>
+  <text x="645" y="90" text-anchor="middle" font-size="14" font-weight="bold" fill="#880e4f">Delta Lake</text>
+  <text x="645" y="108" text-anchor="middle" font-size="11" fill="#555">(on MinIO)</text>
+  <text x="645" y="125" text-anchor="middle" font-size="10" fill="#888">Bronze</text>
+  <text x="645" y="138" text-anchor="middle" font-size="10" fill="#888">Silver</text>
+  <text x="645" y="151" text-anchor="middle" font-size="10" fill="#888">Gold</text>
+
+  <!-- Arrow down from Spark to Dead Letter -->
+  <line x1="455" y1="150" x2="455" y2="195" stroke="#999" stroke-width="1.5" marker-end="url(#arrow)" stroke-dasharray="5,3"/>
+  <rect x="380" y="200" width="150" height="50" rx="6" fill="url(#box)" stroke="#4fc3f7" stroke-width="1.5" stroke-dasharray="4,2"/>
+  <text x="455" y="222" text-anchor="middle" font-size="12" font-weight="bold" fill="#0277bd">Dead Letter Queue</text>
+  <text x="455" y="238" text-anchor="middle" font-size="10" fill="#888">Invalid messages</text>
+
+  <!-- Arrow -->
+  <line x1="710" y1="115" x2="755" y2="115" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- DuckDB -->
+  <rect x="760" y="70" width="120" height="80" rx="6" fill="url(#duckdb)" stroke="#7986cb" stroke-width="2"/>
+  <text x="820" y="100" text-anchor="middle" font-size="14" font-weight="bold" fill="#283593">DuckDB</text>
+  <text x="820" y="120" text-anchor="middle" font-size="11" fill="#555">Analytics Layer</text>
+  <text x="820" y="138" text-anchor="middle" font-size="10" fill="#888">SQL queries</text>
+
+  <!-- Arrow down from DuckDB to Dashboard -->
+  <line x1="820" y1="150" x2="820" y2="195" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Dashboard -->
+  <rect x="760" y="200" width="120" height="50" rx="6" fill="url(#dash)" stroke="#ab47bc" stroke-width="2"/>
+  <text x="820" y="222" text-anchor="middle" font-size="14" font-weight="bold" fill="#6a1b9a">Dashboard</text>
+  <text x="820" y="238" text-anchor="middle" font-size="11" fill="#555">Streamlit</text>
+
+  <!-- Medallion labels -->
+  <text x="50" y="310" font-size="11" fill="#888">Medallion Architecture: Bronze (raw) → Silver (clean) → Gold (aggregated)</text>
+  <text x="50" y="328" font-size="11" fill="#888">Docker Compose · 7 services · Health checks · Persistent volumes</text>
+</svg>

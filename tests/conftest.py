@@ -65,9 +65,7 @@ def sample_events() -> list[ClickstreamEvent]:
             event_time=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             user_id=f"user_{i:06d}",
             session_id=f"sess_{i}_{uuid4().hex[:8]}",
-            event_type=random.choice(
-                ["page_view", "product_view", "add_to_cart", "purchase"]
-            ),
+            event_type=random.choice(["page_view", "product_view", "add_to_cart", "purchase"]),
             page=random.choice(["/", "/products", "/cart", "/checkout"]),
             product_id=f"prod_{random.randint(1, 100):03d}",
             category=random.choice(["electronics", "clothing", "home_garden"]),

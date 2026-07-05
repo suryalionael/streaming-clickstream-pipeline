@@ -11,7 +11,8 @@ pytestmark = pytest.mark.skipif(
         capture_output=True,
         text=True,
         check=False,
-    ).returncode != 0,
+    ).returncode
+    != 0,
     reason="Docker daemon not available",
 )
 

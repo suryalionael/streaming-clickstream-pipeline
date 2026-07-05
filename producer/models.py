@@ -128,7 +128,7 @@ class SessionState:
     user_id: str
     session_id: str
     events: list[ClickstreamEvent] = field(default_factory=list)
-    cart_items: list[dict] = field(default_factory=list)
+    cart_items: list[dict[str, Any]] = field(default_factory=list)
     cart_value: float = 0.0
     current_page: str = "/"
     current_category: str | None = None

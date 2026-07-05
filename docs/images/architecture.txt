@@ -1,0 +1,28 @@
+
+Streaming Clickstream Pipeline - Architecture
+=============================================
+
+┌────────────┐     ┌────────────┐     ┌──────────────────┐     ┌──────────┐     ┌───────────┐
+│  Producer  │────▶│   Kafka    │────▶│  Spark Streaming  │────▶│Δ Delta   │────▶│  DuckDB   │
+│   (Faker)  │     │ (Broker)   │     │ (Structured Str.) │     │  Lake    │     │ (Analytics)│
+└────────────┘     └────────────┘     └──────────────────┘     └──────────┘     └───────────┘
+                                              │                                          │
+                                              ▼                                          ▼
+                                       ┌──────────────┐                          ┌───────────┐
+                                       │ Dead Letter   │                          │  Streamlit │
+                                       │   Delta Table │                          │ Dashboard  │
+                                       └──────────────┘                          └───────────┘
+
+Layers:
+  Bronze:  Raw events with ingestion_metadata (partitioned by year/month/day/hour)
+  Silver:  Cleaned, validated, enriched, deduplicated events
+  Gold:    Aggregated metrics (funnel, product_performance, traffic_analytics)
+
+Services:
+  - Zookeeper :2181    - Coordinator for Kafka
+  - Kafka     :9092    - Message broker (6 partitions)
+  - Kafka UI  :8080    - Kafka management interface
+  - MinIO     :9000    - S3-compatible storage (Delta Lake backend)
+  - Producer  :        - Synthetic clickstream generator (~50 events/sec)
+  - Spark     :4040    - Streaming pipeline (Bronze/Silver/Gold)
+  - Dashboard :8501    - Streamlit real-time analytics

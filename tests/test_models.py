@@ -1,5 +1,7 @@
 """Tests for data models."""
 
+from typing import Any
+
 from producer.models import ClickstreamEvent, SessionState
 
 
@@ -16,7 +18,7 @@ class TestClickstreamEvent:
         assert d["page"] == "/"
         assert d["currency"] == "USD"
 
-    def test_from_dict(self, sample_event_dict: dict) -> None:
+    def test_from_dict(self, sample_event_dict: dict[str, Any]) -> None:
         event = ClickstreamEvent.from_dict(sample_event_dict)
         assert event.event_id == sample_event_dict["event_id"]
         assert event.event_type == "purchase"

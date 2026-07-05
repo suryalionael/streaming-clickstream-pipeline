@@ -4,6 +4,7 @@ import logging
 import random
 import time
 from datetime import UTC, datetime
+from typing import Any
 
 from producer.config import GeneratorConfig
 from producer.models import ClickstreamEvent, SessionState
@@ -11,7 +12,7 @@ from producer.models import ClickstreamEvent, SessionState
 logger = logging.getLogger(__name__)
 
 
-def weighted_choice(items: list[dict], weight_key: str = "weight") -> dict:
+def weighted_choice(items: list[dict[str, Any]], weight_key: str = "weight") -> dict[str, Any]:
     """Select an item from a weighted list using roulette-wheel selection."""
     total = sum(item[weight_key] for item in items)
     r = random.uniform(0, total)
@@ -41,9 +42,9 @@ class ClickstreamGenerator:
             return session
 
         if len(self.sessions) > self.config.num_users * 3:
-            oldest = sorted(
-                self.sessions.keys(), key=lambda k: self.sessions[k].started_at
-            )[: len(self.sessions) // 4]
+            oldest = sorted(self.sessions.keys(), key=lambda k: self.sessions[k].started_at)[
+                : len(self.sessions) // 4
+            ]
             for k in oldest:
                 del self.sessions[k]
 
@@ -138,9 +139,7 @@ class ClickstreamGenerator:
             return session.current_category
         return random.choice(self.config.categories)
 
-    def _get_product(
-        self, category: str | None = None
-    ) -> tuple[str | None, str | None, float]:
+    def _get_product(self, category: str | None = None) -> tuple[str | None, str | None, float]:
         if category and category in self.config.products:
             product_list = self.config.products[category]
         else:
@@ -166,9 +165,7 @@ class ClickstreamGenerator:
         return product, category, price
 
     @staticmethod
-    def _transition_event_type(
-        last_event_type: str, is_converting: bool
-    ) -> str | None:
+    def _transition_event_type(last_event_type: str, is_converting: bool) -> str | None:
         """Determine next event type using a state machine."""
         # Threshold tables: (threshold, event) pairs per source state.
         # A random r is generated per source; the first threshold r < t wins.
@@ -245,11 +242,7 @@ class ClickstreamGenerator:
 
         # Compute conversion probability with traffic source bonus
         source_info = next(
-            (
-                s
-                for s in self.config.traffic_sources
-                if s["source"] == session.traffic_source
-            ),
+            (s for s in self.config.traffic_sources if s["source"] == session.traffic_source),
             None,
         )
         effective_conversion = self.config.conversion_rate + (
@@ -263,16 +256,12 @@ class ClickstreamGenerator:
                 event_type="page_view",
                 user_id=session.user_id,
                 session_id=session.session_id,
-                page=random.choice(
-                    ["/", "/products", "/new-arrivals", "/sale", "/deals"]
-                ),
+                page=random.choice(["/", "/products", "/new-arrivals", "/sale", "/deals"]),
                 country=session.country,
                 city=session.city,
                 traffic_source=session.traffic_source,
                 campaign=session.campaign,
-                referrer=random.choice(
-                    ["google.com", "facebook.com", "direct", "email.com"]
-                ),
+                referrer=random.choice(["google.com", "facebook.com", "direct", "email.com"]),
                 device=session.device,
                 browser=session.browser,
                 operating_system=session.operating_system,

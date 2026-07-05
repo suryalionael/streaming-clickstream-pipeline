@@ -120,9 +120,7 @@ class KafkaProducerClient:
                 if attempt < max_retries - 1:
                     time.sleep(0.5 * (attempt + 1))
                 else:
-                    raise KafkaProducerError(
-                        f"Failed to send after {max_retries} retries"
-                    ) from e
+                    raise KafkaProducerError(f"Failed to send after {max_retries} retries") from e
         return False
 
     def send_batch(self, events: list[ClickstreamEvent]) -> int:

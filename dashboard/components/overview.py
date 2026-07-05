@@ -84,7 +84,9 @@ def render_overview(
     for col, (label, value, prefix, fmt, color) in zip(kpi_cols, kpis, strict=False):
         with col:
             curr_val = float(value)
-            prev_val = float(metrics.get(f"{label.lower().replace('/', '_').replace(' ', '_')}_prev", 0))
+            prev_val = float(
+                metrics.get(f"{label.lower().replace('/', '_').replace(' ', '_')}_prev", 0)
+            )
             arrow = _trend_arrow(curr_val, prev_val)
 
             st.metric(

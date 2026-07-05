@@ -61,7 +61,7 @@ class GeneratorConfig:
         ]
     )
 
-    countries: list[dict] = field(
+    countries: list[dict[str, Any]] = field(
         default_factory=lambda: [
             {"country": "United States", "city": "New York", "weight": 25},
             {"country": "United States", "city": "San Francisco", "weight": 15},
@@ -77,7 +77,7 @@ class GeneratorConfig:
         ]
     )
 
-    traffic_sources: list[dict] = field(
+    traffic_sources: list[dict[str, Any]] = field(
         default_factory=lambda: [
             {"source": "direct", "weight": 25, "conversion_bonus": 0.02},
             {"source": "organic_search", "weight": 25, "conversion_bonus": 0.01},

@@ -10,7 +10,10 @@ def parse_event_time(df: DataFrame) -> DataFrame:
     """Parse event_time string to timestamp."""
     return df.withColumn(
         "event_timestamp",
-        F.to_timestamp(F.col("event_time"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+        F.to_timestamp(
+            F.regexp_replace(F.col("event_time"), r"\.\d+Z$", ""),
+            "yyyy-MM-dd'T'HH:mm:ss",
+        ),
     )
 
 
@@ -104,18 +107,18 @@ def compute_funnel_metrics(
             F.count(F.when(F.col("event_type") == "page_view", 1)).alias("page_views"),
             F.count(F.when(F.col("event_type") == "product_view", 1)).alias("product_views"),
             F.count(F.when(F.col("event_type") == "add_to_cart", 1)).alias("add_to_carts"),
-            F.count(
-                F.when(F.col("event_type").isin("begin_checkout", "payment"), 1)
-            ).alias("checkout_starts"),
+            F.count(F.when(F.col("event_type").isin("begin_checkout", "payment"), 1)).alias(
+                "checkout_starts"
+            ),
             F.count(F.when(F.col("event_type") == "purchase", 1)).alias("purchases"),
             F.countDistinct("session_id").alias("sessions"),
             F.countDistinct("user_id").alias("unique_users"),
-            F.avg(
-                F.when(F.col("event_type") == "add_to_cart", F.col("cart_value"))
-            ).alias("avg_cart_value"),
-            F.sum(
-                F.when(F.col("event_type") == "purchase", F.col("cart_value"))
-            ).alias("total_revenue"),
+            F.avg(F.when(F.col("event_type") == "add_to_cart", F.col("cart_value"))).alias(
+                "avg_cart_value"
+            ),
+            F.sum(F.when(F.col("event_type") == "purchase", F.col("cart_value"))).alias(
+                "total_revenue"
+            ),
         )
         .withColumn(
             "conversion_rate",
@@ -159,7 +162,9 @@ def compute_product_performance(
             "hour",
         )
         .agg(
-            F.count(F.when(F.col("event_type").isin("product_view", "page_view"), 1)).alias("views"),
+            F.count(F.when(F.col("event_type").isin("product_view", "page_view"), 1)).alias(
+                "views"
+            ),
             F.count(F.when(F.col("event_type") == "add_to_cart", 1)).alias("add_to_carts"),
             F.count(F.when(F.col("event_type") == "purchase", 1)).alias("purchases"),
             F.sum(F.when(F.col("event_type") == "purchase", F.col("cart_value"))).alias("revenue"),

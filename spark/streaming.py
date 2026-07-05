@@ -117,9 +117,9 @@ def write_to_dead_letter(df: DataFrame, epoch_id: int) -> None:
         .withColumn("hour", F.hour(F.current_timestamp()))
     )
 
-    dl.write.format("delta").mode("append").partitionBy(
-        "year", "month", "day", "hour"
-    ).save(config.dead_letter_path)
+    dl.write.format("delta").mode("append").partitionBy("year", "month", "day", "hour").save(
+        config.dead_letter_path
+    )
     logger.info(
         "Dead-letter write complete",
         extra={"epoch_id": epoch_id, "records": dl.count()},
@@ -129,9 +129,9 @@ def write_to_dead_letter(df: DataFrame, epoch_id: int) -> None:
 def write_to_bronze(df: DataFrame, epoch_id: int) -> None:
     """Write raw events to Delta Lake bronze layer."""
     batch_df = df.transform(parse_event_time)
-    batch_df = batch_df.transform(lambda d: d.withColumn(
-        "ingestion_timestamp", F.current_timestamp().cast("string")
-    ))
+    batch_df = batch_df.transform(
+        lambda d: d.withColumn("ingestion_timestamp", F.current_timestamp().cast("string"))
+    )
     batch_df = batch_df.transform(add_partition_columns)
     batch_df = validate_event(batch_df)[0]
 
@@ -206,9 +206,7 @@ def foreach_batch_all(df: DataFrame, epoch_id: int) -> None:
         if row_count == 0:
             return
 
-        logger.info(
-            "Processing batch", extra={"epoch_id": epoch_id, "records": row_count}
-        )
+        logger.info("Processing batch", extra={"epoch_id": epoch_id, "records": row_count})
 
         # Split into valid and invalid messages
         parsed = df.select(
