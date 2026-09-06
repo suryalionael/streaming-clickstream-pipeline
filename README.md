@@ -20,6 +20,10 @@
   Kafka → Spark Structured Streaming → Delta Lake → DuckDB → Streamlit
 </p>
 
+## Live Demo
+
+🔗 **[Live Demo](#)** — TODO: replace with your deployed Streamlit Community Cloud URL (built from `dashboard/app_static.py`, a static snapshot — no Kafka/Spark/Docker required to view it)
+
 ## Key Features
 
 - **Event-driven ingestion** — ~50 events/sec from a synthetic generator into Kafka with idempotent exactly-once semantics
@@ -199,6 +203,10 @@ streaming-clickstream-pipeline/
 ├── storage/            # Data lake access layer
 │   ├── config.py       # Storage configuration
 │   └── queries.py      # DuckDB queries for dashboard
+├── replay/             # Static Gold-layer snapshot export
+│   ├── export.py       # Reads local Delta tables or generates a sample
+│   ├── sample_data.py  # Synthetic Gold-layer sample generator
+│   └── snapshots/      # Parquet/CSV output consumed by app_static.py
 ├── docker/             # Container definitions
 │   ├── producer/Dockerfile
 │   ├── spark/Dockerfile
@@ -207,7 +215,18 @@ streaming-clickstream-pipeline/
 ├── docs/               # Documentation
 ├── docker-compose.yml  # 7-service orchestration
 ├── Makefile            # Development commands
+├── requirements-static.txt  # Minimal deps for the standalone dashboard
 └── pyproject.toml      # Project configuration
+```
+
+### Standalone Static Dashboard
+
+`dashboard/app_static.py` reads the Parquet/CSV snapshots in `replay/snapshots/` instead of a live DuckDB/Delta connection, so it runs with no Kafka, Spark, or Docker dependency — suitable for deployment to Streamlit Community Cloud.
+
+```bash
+python -m replay.export                              # generate/refresh the snapshot
+pip install -r requirements-static.txt
+streamlit run dashboard/app_static.py
 ```
 
 ## Testing
@@ -280,6 +299,10 @@ Key configuration options:
 - Schema registry integration
 - Rate limiting with backpressure
 - End-to-end data quality monitoring (row count SLAs, schema drift detection)
+
+## What I'd Do Differently
+
+_TODO: fill this in yourself — a few honest notes on what you'd change if you rebuilt this pipeline today (design trade-offs, tech choices, things you'd simplify or scale differently)._
 
 ## License
 
